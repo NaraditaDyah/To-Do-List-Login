@@ -14,6 +14,7 @@
              background-position: center; 
              background-repeat: no-repeat; 
              background-attachment: fixed; 
+             background-color: #06141d; /* TRICK: Pengganti warna putih saat loading */
              min-height: 100vh; 
              margin: 0;" class="position-relative text-dark font-sans antialiased">
 
@@ -101,11 +102,12 @@
                                                 </span>
                                             </td>
                                             <td class="text-center">
-                                                <form action="{{ route('todo.check', $todo->id) }}" method="POST">
+                                                <form action="{{ route('todo.check', $todo->id) }}" method="POST"
+                                                    class="form-checklist">
                                                     @csrf
                                                     @method('PUT')
                                                     <button type="submit"
-                                                        class="btn btn-sm {{ $todo->is_completed ? 'btn-success' : 'btn-outline-success' }}">
+                                                        class="btn btn-sm btn-checklist {{ $todo->is_completed ? 'btn-success' : 'btn-outline-success' }}">
                                                         @if($todo->is_completed)
                                                             <i class="bi bi-check-circle-fill"></i> Selesai
                                                         @else
@@ -194,6 +196,72 @@
             }
         });
     </script>
+    <script>
+        document.querySelectorAll('.form-checklist').forEach(form => {
+            form.addEventListener('submit', function (e) {
+                e.preventDefault(); // Kunci halaman agar tidak refresh
+
+                let formElement = this;
+                let url = formElement.getAttribute('action');
+                let token = formElement.querySelector('input[name="_token"]').value;
+                let button = formElement.querySelector('.btn-checklist');
+                let row = formElement.closest('tr');
+                let tdTask = row.querySelector('td:nth-child(2)');
+                let badge = row.querySelector('td:nth-child(3) .badge');
+
+                // Mengambil teks tugas secara bersih (tanpa tag <del> atau <span>)
+                let taskText = tdTask.textContent.trim();
+
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': token,
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams(new FormData(formElement))
+                })
+                    .then(response => {
+                        if (response.ok) {
+                            // JIKA SEBELUMNYA "BELUM" -> BERUBAH MENJADI "SELESAI"
+                            if (button.classList.contains('btn-outline-success')) {
+                                button.className = 'btn btn-sm btn-checklist btn-success';
+                                button.innerHTML = '<i class="bi bi-check-circle-fill"></i> Selesai';
+                                tdTask.innerHTML = `<del class="text-muted italic">${taskText}</del>`;
+
+                                if (badge) badge.className = 'badge bg-secondary';
+                            }
+                            // JIKA SEBELUMNYA "SELESAI" -> BERUBAH MENJADI "BELUM" (UNCHECKLIST)
+                            else {
+                                button.className = 'btn btn-sm btn-checklist btn-outline-success';
+                                button.innerHTML = '<i class="bi bi-circle"></i> Belum';
+
+                                // Kembalikan teks biasa tanpa coretan
+                                tdTask.innerHTML = `<span>${taskText}</span>`;
+
+                                // Hitung ulang warna badge berdasarkan tanggal tenggat secara real-time
+                                if (badge) {
+                                    // Ambil tanggal dari badge (format d-m-Y)
+                                    let parts = badge.textContent.trim().split('-');
+                                    let deadlineDate = new Date(parts[2], parts[1] - 1, parts[0]);
+                                    let today = new Date();
+                                    today.setHours(0, 0, 0, 0); // Reset jam agar adil
+
+                                    if (deadlineDate < today) {
+                                        badge.className = 'badge bg-danger'; // Merah jika telat
+                                        tdTask.querySelector('span').className = 'text-danger fw-bold';
+                                    } else {
+                                        badge.className = 'badge bg-success'; // Hijau jika aman
+                                    }
+                                }
+                            }
+                        }
+                    })
+                    .catch(error => console.error('Error:', error));
+            });
+        });
+    </script>
+</body>
 </body>
 
 </html>
